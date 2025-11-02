@@ -3,6 +3,7 @@ import { json } from "@sveltejs/kit";
 import { GoogleGenAI, Type } from "@google/genai";
 import { env } from '$env/dynamic/private';
 import { dev } from '$app/environment';
+import { FilenameSchema } from "$lib/schema.js";
 
 
 /**
@@ -11,8 +12,26 @@ import { dev } from '$app/environment';
  */
 export async function POST({ request }) {
 	try {
-		// 1. Get the user's data from the request body
-		const { description } = await request.json();
+	// 1. Get the user's data from the request body
+	const body = await request.json();
+
+	// VALIDATION
+	const validationResult = FilenameSchema.safeParse(body);
+
+		if (!validationResult.success) {
+			// If validation fails, return a 400 Bad Request response with the error details
+			const issues = validationResult.error.issues.map(issue => issue.message).join('; ');
+			return json(
+				{
+					success: false,
+					error: `Validation failed: ${issues}`
+				},
+				{ status: 400 }
+			)
+		}
+
+		// If successful, the validated and clean data is in validationResult.data
+		const { description } = validationResult.data;
 
 		// 1.a Read the API key at runtime and validate it
 		const apiKey = env.GEMINI_API_KEY;
@@ -31,12 +50,7 @@ export async function POST({ request }) {
             The output MUST be a JSON array of strings, with NO other commentary, markdown ticks, or text.
             Filenames must be lowercase, use hyphens instead of spaces, and have appropriate file extensions (like .pdf, .doc, .jpg, etc.)`;
 
-		// 3. Validate input
-		if (!description || typeof description !== 'string' || !description.trim()) {
-			return json({ success: false, error: 'Invalid request: description is required.' }, { status: 400 });
-		}
-
-		// 4. Call the Gemini API with structured output config
+		// Call Gemini API with structured output config
 		let response;
 		try {
 			response = await ai.models.generateContent({
