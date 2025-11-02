@@ -1,58 +1,120 @@
-# Svelte library
+# AI File Namer
 
-Everything you need to build a Svelte library, powered by [`sv`](https://npmjs.com/package/sv).
+A small SvelteKit app that uses Google Gemini (via `@google/genai`) to suggest well-formatted filenames from a short description. It exposes a secure server endpoint that calls the GenAI model and returns a JSON array of suggested filenames.
 
-Read more about creating a library [in the docs](https://svelte.dev/docs/kit/packaging).
+This repository is a compact demo and starter for integrating a text-generation model into a web UI where the model output is constrained and validated.
 
-## Creating a project
+## Features
 
-If you're seeing this, you've probably already done this step. Congrats!
+- SvelteKit frontend with a textarea to enter a document description.
+- Server-side endpoint (`/api/generate`) that calls the GenAI client and returns 5 filename suggestions.
+- Input validation using `zod` (trim, non-empty, min/max length).
+- Clipboard-friendly UI with a smooth "Copy → Copied" transition for suggested names.
+- Defensive server parsing and helpful dev-mode error messages.
 
-```sh
-# create a new project in the current directory
-npx sv create
+## Stack / Key dependencies
 
-# create a new project in my-app
-npx sv create my-app
+- SvelteKit
+- Vite
+- @google/genai (Gemini client)
+- zod (input validation)
+
+See `package.json` for exact versions.
+
+## Prerequisites
+
+- Node.js 18+ (or the version your environment expects)
+- npm (or pnpm/yarn)
+- A Google Gemini API key with access to the model used in this project. Store it in an environment variable called `GEMINI_API_KEY`.
+
+## Setup
+
+1. Clone the repository and install dependencies (from project root):
+
+```bash
+npm install
 ```
 
-## Developing
+2. Create a `.env.local` file at the project root (next to `package.json`) and add your key:
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+```
+GEMINI_API_KEY=YOUR_REAL_KEY_HERE
+```
 
-```sh
+> Important: Do NOT commit `.env.local` to source control. Ensure your `.gitignore` contains it.
+
+3. Start the dev server:
+
+```bash
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-Everything inside `src/lib` is part of your library, everything inside `src/routes` can be used as a showcase or preview app.
+Open `http://localhost:5173` (or the port printed by dev server) and try the textarea.
 
-## Building
+## API: /api/generate
 
-To build your library:
+- Method: POST
+- Content-Type: application/json
+- Body shape: `{ "description": "...your description..." }`
 
-```sh
-npm pack
+Success response:
+
+```json
+{ "success": true, "names": ["file-name-1.pdf", "file-name-2.docx", ...] }
 ```
 
-To create a production version of your showcase app:
+Failure responses include a `success: false` and an `error` message. Validation errors return HTTP 400 with a message assembled from Zod issues.
 
-```sh
-npm run build
+### Example curl
+
+```bash
+curl -X POST 'http://localhost:5173/api/generate' \
+	-H 'Content-Type: application/json' \
+	-d '{"description":"List of employee names in my company"}'
 ```
 
-You can preview the production build with `npm run preview`.
+## Validation rules (server-side)
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Validation is implemented with `src/lib/schema.js` using `zod`:
 
-## Publishing
+- `description` is trimmed
+- must be non-empty (custom message)
+- must be at least 10 characters
+- must be at most 500 characters
 
-Go into the `package.json` and give your package the desired name through the `"name"` option. Also consider adding a `"license"` field and point it to a `LICENSE` file which you can create from a template (one popular option is the [MIT license](https://opensource.org/license/mit/)).
+The server uses `FilenameSchema.safeParse(body)` to validate the incoming JSON before calling the model.
 
-To publish your library to [npm](https://www.npmjs.com):
+## UI details
 
-```sh
-npm publish
-```
+- `src/routes/+page.svelte` contains the main UI. It posts to the server route at `api/generate` and renders results.
+- Copy buttons use the Clipboard API and show a transient "Copied" state for UX clarity.
+
+## Error handling & debugging
+
+- The server route performs defensive parsing of the GenAI SDK response and returns helpful error messages in dev mode.
+- If you get an error about the API key, ensure `GEMINI_API_KEY` is set and the dev server was restarted after creating/updating `.env.local`.
+- If validation fails, check the description length and whitespace (the schema trims input first).
+
+## Deployment
+
+- Use your hosting provider's secret management to set `GEMINI_API_KEY` in production instead of `.env.local`.
+- This project includes `@sveltejs/adapter-*` packages in devDependencies; choose and configure an adapter for your target platform (Vercel, Netlify, Cloudflare Pages, etc.).
+
+## Security & privacy
+
+- Never commit secrets. Use the hosting platform's environment variables for production.
+- Model requests may be logged by the model provider—avoid sending highly sensitive personal or proprietary data unless your contract and security posture permit it.
+
+## Development notes & suggestions
+
+- Convert server routes to TypeScript (`+server.ts`) if you want stronger types for request/response objects.
+- Add tests that exercise `src/lib/schema.js` to assert validation behaviour across edge cases.
+- Consider sanitizing or escaping user-supplied content before rendering or storing it.
+
+## Contributing
+
+PRs are welcome. Keep changes small and focused. If adding features that change the API shape, update this README and add tests.
+
+## License
+
+Choose a license for your project (e.g., MIT). This repo currently does not include a license file.
